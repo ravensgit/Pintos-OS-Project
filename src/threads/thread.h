@@ -89,7 +89,13 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+    
+    /* Tick value at or on which this thread must wake up (used by timer). */
+    int64_t alarm_time;
 
+   /* Include for thread management in sleepers list. */
+    struct list_elem alarm_elem;    
+                  
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 

@@ -8,9 +8,9 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Sashidhar Motte <smotte@buffalo.edu>
+Charan Kumar Bolla <cbolla@buffalo.edu>
+Naveen Manikandan <manikan2@buffalo.edu>
 
 ---- PRELIMINARIES ----
 
@@ -30,26 +30,70 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+To implement a non-busy-waiting sleep function, we need to track sleeping 
+threads and their wake-up times. The following structures were added or changed:
+
+In struct thread (from threads/thread.h):
+
+	int64_t alarm_time;
+
+	- This holds the specific system tick value when a 
+	  sleeping thread should be awakened.
+
+	struct list_elem alarm_elem;
+
+	- This element allows a thread to be placed on a list, 
+	  in this case, the sleepers list.
+
+
+In devices/timer.c:
+
+	static struct list sleepers;
+
+	- A global list containing all threads that are currently sleeping.
+	  It is kept sorted by alarm_time.
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+When a thread calls timer_sleep(), it first calculates its target wake-up time. It then disables interrupts, adds itself to a global sleepers list that is kept sorted by wake-up time, and calls thread_block() to go to sleep. This immediately yields the CPU. The thread consumes no processor time until the timer interrupt handler, which runs on every clock tick, finds that the thread's wake-up time has been reached. At that moment, the handler removes the thread from the sleepers list and calls thread_unblock(), moving it to the ready queue so it can be scheduled to run again.
+
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+The primary step to minimize time in the interrupt handler is maintaining 
+the "sleepers" list in 'sorted order'. By keeping the list sorted by wake-up 
+time, the handler only ever needs to check the thread at the very front. 
+If that thread isn't ready to wake up, the handler knows that no other threads 
+in the list are ready either and can exit immediately. This avoids a slow and 
+inefficient scan of the entire list on every single tick.
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
+The main problem is that the global sleepers list is a shared resource. If multiple threads tried to add themselves to it at the same time, the list's pointers could get corrupted. We avoid this by wrapping the list modification code inside a call to intr_disable(). This stops the OS from switching threads, so only one thread can be touching the list at any given moment. It has to finish its work before another thread can get a turn.
+
+
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+
+This is pretty much the same issue, but the race is between a thread adding itself to the sleepers list and the timer interrupt trying to read from it. The solution is the same: the intr_disable() call in timer_sleep() also stops the timer interrupt from firing. This guarantees that the interrupt handler won't ever run in the middle of a list update and see a broken, half-modified list.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+
+The biggest reason for this design was to get rid of the old implementation's busy-waiting. Having a thread spin in a loop, wasting CPU cycles just to check the time, is incredibly inefficient. Our new design is much better because it uses thread_block() to put the thread completely to sleep, meaning it uses zero CPU resources while it waits. This frees up the processor to do actual work for other threads.
+
+We also considered using a simple, unsorted list to keep track of sleeping threads. While that would have worked, it would have been slow. The timer interrupt would have to scan the entire list every time it ran, just to see if anyone's time was up. We decided to use a sorted list instead. It's a little more work to insert threads, but it makes the interrupt handler's job super fast, it just has to peek at the first thread. For something that runs 100 times a second, that small optimization makes a big difference.
+
 
              PRIORITY SCHEDULING
              ===================

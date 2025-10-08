@@ -288,6 +288,16 @@ and robust.
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+In threads/thread.h, we are adding the nice, recent_cpu to the struct thread
+   int nice;
+   >> It says how nice the thread is. Higher the value lesser the priority 
+   int recent_cpu; 
+   >> It tracks how much cpu time a thread is recently used
+
+In threads/thread.c, we are adding the load_avg as a global variable
+   static int load_avg;
+   >> It is used to estimate the average number of threads ready to run in a fixed time window.
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
@@ -295,26 +305,45 @@ and robust.
 >> scheduling decision and the priority and recent_cpu values for each
 >> thread after each given number of timer ticks:
 
+Given, 
+The nice values for A,B,C are 0,1,2 respectively and each has recent_cpu 0.
+After each timer tick, the recent_cpu increases for the running thread
+and every 4 ticks the priority is recalculated by using the below formula.
+priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+
+For the table,  
 timer  recent_cpu    priority   thread
 ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
+0	      0	  0	  0	  63	61	59	  A
+4       4	  0	  0	  62	61	59	  A
+8	      8	  0	  0	  61	61	59	  B
+12	    8	  4	  0	  61	60	59	  A
+16	   12	  4	  0	  60	60	59	  B
+20	   12	  8	  0	  60	59	59	  A
+24	   16	  8	  0	  59	59	59	  B
+28	   16	 12	  0	  59	58	59	  C
+32	   16	 12	  4 	59	58	58	  A
+36	   20	 12	  4	  58	58	58	  B
+
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
 
+The main ambiguity we found was in the implementing the round-robin scheduling for the 
+when they have same priority. To resolve this, we are defining the stric rule, that the scheduler will 
+always pick the thread at the top of the highest priority ready queue. when the thread time 
+slice end it will move to next one in that queue. This ensures the fairness for the equal priority threads
+
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
+
+Inside the timer interrupt handler, we will be keeping the logic of the lightweight by 
+incrementing global ticks, updating the running thread’s recent_cpu, and 
+setting the flags to trigger periodic recalculations. Outside the interrupt context, 
+we will be performing the heavier computations like recalculating the load_avg, recent_cpu, and priorities,
+and managing the ready list for rescheduling.
 
 ---- RATIONALE ----
 
@@ -323,12 +352,36 @@ ticks   A   B   C   A   B   C   to run
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
 
+The main advantage of this design is its responsiveness because by moving
+heavy calculations out of timer interrupt, the sysytem doesn't get slow down
+and react to events quickly.
+
+The disadvantage, it is updating all the threads recent_cpu values prediocally
+which is expensive and it is complex to build.
+
+If there were more time, a refinement would be to optimize the data structures
+for the ready queues. This could allow the scheduler to find the next thread 
+to run without iterating through all 64 priority levels, further improving performance.
+
+
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
 >> decide to implement it the way you did?  If you created an
 >> abstraction layer for fixed-point math, that is, an abstract data
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
+
+we will implement fixed-point math by creating an abstraction layer in a new header file, 
+threads/fixed-point.h, which will contain a set of C macros.
+
+This approach was chosen for its benefits in readability and correctness. The macros will 
+allow the C code to closely mirror the scheduler's mathematical formulas, making the implementation 
+easier to verify against the specification. This also prevents common bugs, such as integer overflow, 
+by ensuring that the proper 64-bit casting is used consistently for all relevant calculations .
+
+The alternative, performing raw integer arithmetic inline, was rejected because it would make 
+the scheduler code harder to read and more prone to error.
+
 
                SURVEY QUESTIONS
                ================

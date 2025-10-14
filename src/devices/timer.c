@@ -104,14 +104,22 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  if (ticks <= 0) return;
+   if (ticks <= 0) {
+    return;
+  }
+
+  enum intr_level old_level;
+  old_level = intr_disable ();
 
   struct thread *cur = thread_current ();
+  // CHANGE THIS: Use wakeup_tick to match the struct definition.
   cur->alarm_time = timer_ticks () + ticks;
 
-  enum intr_level old_level = intr_disable ();
+  // This line is correct, assuming alarm_elem is in your struct.
   list_insert_ordered (&sleepers, &cur->alarm_elem, earlier_deadline, NULL);
+
   thread_block ();
+  
   intr_set_level (old_level);
 }
 

@@ -147,16 +147,7 @@ thread_print_stats (void)
           idle_ticks, kernel_ticks, user_ticks);
 }
 
-/* Compares the priorities of two threads.
-   Returns true if thread A has a higher priority than thread B. */
-// static bool
-// thread_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-// {
-//   struct thread *thread_a = list_entry(a, struct thread, elem);
-//   struct thread *thread_b = list_entry(b, struct thread, elem);
 
-//   return thread_a->priority > thread_b->priority;
-// }
 static bool
 thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
@@ -347,8 +338,6 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
     {
-      /* The original list_push_back() corrupts the sorted list, causing infinite loops.
-         It MUST be replaced with list_insert_ordered(). */
       list_insert_ordered(&ready_list, &cur->elem, thread_priority_compare, NULL);
     }
   
@@ -388,7 +377,6 @@ thread_set_priority (int new_priority)
   
   intr_set_level(old_level);
 
-  // Only yield if a higher-priority thread is ready
   if (!list_empty (&ready_list))
     {
       struct thread *front = list_entry (list_front (&ready_list), struct thread, elem);

@@ -53,14 +53,6 @@ sema_init (struct semaphore *sema, unsigned value)
 }
 
 
-// static bool
-// thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-// {
-//   struct thread *thread_a = list_entry(a, struct thread, elem);
-//   struct thread *thread_b = list_entry(b, struct thread, elem);
-//   return thread_a->priority > thread_b->priority;
-// }
-
 static bool
 thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
@@ -134,7 +126,6 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
     {
-      /* Find the waiter with the highest *current* priority (reflecting donations). */
       struct list_elem *e;
       struct list_elem *best = list_begin(&sema->waiters);
       for (e = list_next(best); e != list_end(&sema->waiters); e = list_next(e))
@@ -245,7 +236,6 @@ lock_acquire (struct lock *lock)
       current->wait_on_lock = lock;
       list_push_back(&lock->holder->donations, &current->donation_elem);
 
-      // Nested donation
       struct thread *t = lock->holder;
       int depth = 0;
       while (t != NULL && depth < MAX_DONATION_DEPTH)
@@ -335,7 +325,6 @@ cond_init (struct condition *cond)
   list_init (&cond->waiters);
 }
 
-/* Compares priority of semaphore_elem A to B for condition variables. */
 static bool
 sema_elem_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {

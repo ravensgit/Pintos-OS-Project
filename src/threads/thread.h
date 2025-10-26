@@ -89,7 +89,37 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-    
+
+
+
+
+
+
+
+
+// // charan comment : start
+
+
+
+
+
+    /* In struct thread, near other fields like priority or status */
+
+   int nice;                  /* Niceness value for MLFQS */            // charan comment: each thread's willingness to yield CPU (higher = less priority)
+   int32_t recent_cpu;        /* Recent CPU usage in fixed-point */     // charan comment: tracks how much CPU time the thread has recently consumed
+
+   
+   
+
+
+
+
+
+
+
+// // charan comment : end
+
+
     /* Tick value at or on which this thread must wake up (used by timer). */
     int64_t alarm_time;
 
@@ -155,5 +185,18 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+// // charan comment : start
+
+
+/* ----------------- MLFQS function declarations ----------------- */  // charan comment: added for timer.c linkage
+void mlfqs_increment (void);                                           // charan comment: increments recent_cpu each tick
+void mlfqs_update_load_avg_recent_cpu (void);                          // charan comment: updates load_avg and recent_cpu each second
+void mlfqs_recalc_all_priorities (void);                               // charan comment: recalculates priorities every 4 ticks
+/* ---------------------------------------------------------------- */  // charan comment: end of MLFQS extern declarations
+
+
+// // charan comment : end
+
 
 #endif /* threads/thread.h */

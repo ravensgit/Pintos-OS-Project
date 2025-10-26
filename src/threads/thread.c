@@ -20,6 +20,52 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+
+
+
+
+
+
+// charan comment : Start
+
+
+/* ---------- FIXED POINT ARITHMETIC (17.14 format) ---------- */     // charan comment: helpers for MLFQ math
+typedef int32_t fp;                                                   // charan comment: fp = fixed-point type
+#define F (1 << 14)                                                   // charan comment: scaling factor 2^14
+
+#define INT_TO_FP(n)      ((fp)((n) * F))                             // charan comment: integer → fixed-point
+#define FP_TO_INT_ZERO(x) ((x) / F)                                   // charan comment: truncate toward 0
+#define FP_TO_INT_NEAR(x) ((x) >= 0 ? ((x)+F/2)/F : ((x)-F/2)/F)      // charan comment: round to nearest int
+
+#define FP_ADD(x,y)       ((x) + (y))                                 // charan comment: fp + fp
+#define FP_SUB(x,y)       ((x) - (y))                                 // charan comment: fp − fp
+#define FP_MUL(x,y)       ((fp)(((int64_t)(x)) * (y) / F))            // charan comment: fp × fp
+#define FP_DIV(x,y)       ((fp)(((int64_t)(x)) * F / (y)))            // charan comment: fp ÷ fp
+#define FP_ADD_INT(x,n)   ((x) + INT_TO_FP(n))                        // charan comment: fp + int
+#define FP_SUB_INT(x,n)   ((x) - INT_TO_FP(n))                        // charan comment: fp − int
+#define FP_MUL_INT(x,n)   ((x) * (n))                                 // charan comment: fp × int
+#define FP_DIV_INT(x,n)   ((x) / (n))                                 // charan comment: fp ÷ int
+/* ----------------------------------------------------------- */
+
+// // charan comment : ended
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -53,6 +99,23 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+
+
+
+
+// // charan comment : start
+
+
+/* System load average, used by MLFQS. */                             // charan comment
+static fp load_avg;                                                   // charan comment
+
+
+
+// // charan comment : ended
+
+
+
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -92,6 +155,17 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+// // charan comment : start
+
+
+
+  load_avg = INT_TO_FP(0);                                            // charan comment: start with 0 load average
+
+
+// // charan comment : end
+
+
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -280,6 +354,75 @@ void thread_recalculate_priority (struct thread *t)
   t->priority = max_priority;
 }
 
+
+
+// // charan comment : start
+
+/* ---------------- MLFQS helper functions ---------------- */        // charan comment
+
+/* Every tick: increment recent_cpu of running thread. */
+void mlfqs_increment(void) {                                   // charan comment
+  if (thread_current() == idle_thread) return;                        // charan comment: idle thread ignored
+  thread_current()->recent_cpu = FP_ADD_INT(thread_current()->recent_cpu, 1);
+}
+
+/* Every second: update load_avg and each thread’s recent_cpu. */
+void mlfqs_update_load_avg_recent_cpu(void) {                  // charan comment
+  int ready_threads = list_size(&ready_list);                         // charan comment: ready threads count
+  if (thread_current() != idle_thread) ready_threads++;               // charan comment: include running thread
+
+  load_avg = FP_ADD(FP_MUL(FP_DIV_INT(INT_TO_FP(59),60),load_avg),
+                    FP_MUL_INT(FP_DIV_INT(INT_TO_FP(1),60),ready_threads));   // charan comment: BSD formula
+
+  struct list_elem *e;
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    if (t == idle_thread) continue;
+    fp coeff = FP_DIV(FP_MUL_INT(load_avg,2), FP_ADD_INT(FP_MUL_INT(load_avg,2),1));
+    t->recent_cpu = FP_ADD(FP_MUL(coeff,t->recent_cpu), INT_TO_FP(t->nice));
+  }
+}
+
+/* Recalculate one thread’s priority using MLFQ formula. */
+void mlfqs_recalc_priority(struct thread *t) {                 // charan comment
+  if (t == idle_thread) { t->priority = PRI_MIN; return; }
+
+
+  // charan comment: BSD formula — priority = PRI_MAX − (recent_cpu / 4) − (nice * 2)
+  fp term1 = FP_DIV_INT(t->recent_cpu, 4);                     // charan comment: fixed-point divide by 4
+  fp term2 = INT_TO_FP(t->nice * 2);                           // charan comment: convert nice adjustment to fixed-point
+  fp result = FP_SUB(FP_SUB(INT_TO_FP(PRI_MAX), term1), term2);
+  int new_priority = FP_TO_INT_NEAR(result);                   // charan comment: round to nearest integer
+
+
+  if (new_priority > PRI_MAX) new_priority = PRI_MAX;
+  if (new_priority < PRI_MIN) new_priority = PRI_MIN;
+
+  t->priority = new_priority;
+}
+
+/* Recalculate priorities of all threads. */
+void mlfqs_recalc_all_priorities(void) {                       // charan comment
+  struct list_elem *e;
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+    struct thread *t = list_entry(e, struct thread, allelem);
+    mlfqs_recalc_priority(t);
+  }
+}
+/* ---------------------------------------------------------- */      // charan comment
+
+
+
+
+// // charan comment : end
+
+
+
+
+
+
+
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -380,7 +523,18 @@ thread_set_priority (int new_priority)
 {
   struct thread *current = thread_current ();
   enum intr_level old_level;
+
+
+  // // charan comment : start
+
+  // charan comment: when using MLFQ scheduler, manual priority setting is disabled
+  if (thread_mlfqs)   return;
+
   
+
+
+// // charan comment : end
+
   old_level = intr_disable();
   
   current->base_priority = new_priority;
@@ -404,36 +558,47 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-/* Sets the current thread's nice value to NICE. */
-void
-thread_set_nice (int nice UNUSED) 
-{
-  /* Not yet implemented. */
-}
 
-/* Returns the current thread's nice value. */
-int
-thread_get_nice (void) 
-{
-  /* Not yet implemented. */
-  return 0;
-}
 
-/* Returns 100 times the system load average. */
-int
-thread_get_load_avg (void) 
-{
-  /* Not yet implemented. */
-  return 0;
-}
 
-/* Returns 100 times the current thread's recent_cpu value. */
-int
-thread_get_recent_cpu (void) 
-{
-  /* Not yet implemented. */
-  return 0;
-}
+
+// // charan comment : start
+
+// /* Sets the current thread's nice value to NICE. */
+// void
+// thread_set_nice (int nice UNUSED) 
+// {
+//   /* Not yet implemented. */
+// }
+
+// /* Returns the current thread's nice value. */
+// int
+// thread_get_nice (void) 
+// {
+//   /* Not yet implemented. */
+//   return 0;
+// }
+
+// /* Returns 100 times the system load average. */
+// int
+// thread_get_load_avg (void) 
+// {
+//   /* Not yet implemented. */
+//   return 0;
+// }
+
+// /* Returns 100 times the current thread's recent_cpu value. */
+// int
+// thread_get_recent_cpu (void) 
+// {
+//   /* Not yet implemented. */
+//   return 0;
+// }
+
+
+// // charan comment : end
+
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -525,6 +690,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->base_priority = priority;
   t->wait_on_lock = NULL;
   list_init (&t->donations);
+
+// // charan comment : start
+
+
+  t->nice = 0;                                                        // charan comment: default niceness = 0
+  t->recent_cpu = INT_TO_FP(0);                                       // charan comment: no CPU usage yet
+
+
+// // charan comment : end
+
 
   t->magic = THREAD_MAGIC;
 
@@ -646,3 +821,39 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+
+
+// // charan comment : start
+
+
+
+/* Sets the current thread's nice value to NICE. */
+void thread_set_nice (int nice) {                                     // charan comment
+  enum intr_level old = intr_disable();
+  struct thread *t = thread_current();
+  t->nice = nice;
+  mlfqs_recalc_priority(t);                                           // charan comment: update priority immediately
+  intr_set_level(old);
+  thread_yield();                                                     // charan comment: yield if new priority lower
+}
+
+/* Returns the current thread's nice value. */
+int thread_get_nice (void) {                                          // charan comment
+  return thread_current()->nice;
+}
+
+/* Returns 100× system load_avg (rounded). */
+int thread_get_load_avg (void) {                                      // charan comment
+  return FP_TO_INT_NEAR(FP_MUL_INT(load_avg,100));
+}
+
+/* Returns 100× current thread’s recent_cpu (rounded). */
+int thread_get_recent_cpu (void) {                                    // charan comment
+  return FP_TO_INT_NEAR(FP_MUL_INT(thread_current()->recent_cpu,100));
+}
+
+
+
+// // charan comment : end

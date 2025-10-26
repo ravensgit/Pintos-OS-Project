@@ -7,6 +7,19 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+
+// // charan comment : start
+
+
+/* --- MLFQS externs --- */                                           // charan comment
+extern void mlfqs_increment(void);
+extern void mlfqs_update_load_avg_recent_cpu(void);
+extern void mlfqs_recalc_all_priorities(void);
+
+
+// // charan comment : end
+
+
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -191,6 +204,32 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+
+
+
+
+// // charan comment : start
+
+
+
+
+
+  if (thread_mlfqs) {                                                 // charan comment: run MLFQ updates
+    mlfqs_increment();                                                // charan comment: every tick
+    if (ticks % TIMER_FREQ == 0) mlfqs_update_load_avg_recent_cpu();  // charan comment: every second
+    if (ticks % 4 == 0) {                                             // charan comment: every 4 ticks
+      mlfqs_recalc_all_priorities();                                  // charan comment
+      intr_yield_on_return();                                         // charan comment: preempt if needed
+    }
+  }
+
+
+
+
+
+// // charan comment : end
+
 
     /* Wake up threads whose alarm time has arrived. */
   while (!list_empty (&sleepers)) 

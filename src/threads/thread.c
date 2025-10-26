@@ -26,29 +26,26 @@
 
 
 
-// charan comment : Start
+/// // charan comment : start
 
+typedef int32_t fx_pt;                    
+#define FX_SCALING_FACTOR (1 << 14)       
 
-/* ---------- FIXED POINT ARITHMETIC (17.14 format) ---------- */     // charan comment: helpers for MLFQ math
-typedef int32_t fp;                                                   // charan comment: fp = fixed-point type
-#define F (1 << 14)                                                   // charan comment: scaling factor 2^14
+#define int_to_fx_pt(n)        ((fx_pt)((n) * FX_SCALING_FACTOR))                          
+#define fx_pt_to_INT_ZERO(x)   ((x) / FX_SCALING_FACTOR)                                   
+#define fx_pt_TO_INT_NEAR(x)   ((x) >= 0 ? ((x) + FX_SCALING_FACTOR/2)/FX_SCALING_FACTOR : ((x) - FX_SCALING_FACTOR/2)/FX_SCALING_FACTOR)
 
-#define INT_TO_FP(n)      ((fp)((n) * F))                             // charan comment: integer → fixed-point
-#define FP_TO_INT_ZERO(x) ((x) / F)                                   // charan comment: truncate toward 0
-#define FP_TO_INT_NEAR(x) ((x) >= 0 ? ((x)+F/2)/F : ((x)-F/2)/F)      // charan comment: round to nearest int
+#define Fx_Pt_Adding(x, y)        ((x) + (y))                                               
+#define Fx_Pt_Subtracting(x, y)   ((x) - (y))                                               
+#define Fx_Pt_Multiplying(x, y)   ((fx_pt)(((int64_t)(x)) * (y) / FX_SCALING_FACTOR))       
+#define Fx_Pt_Dividing(x, y)      ((fx_pt)(((int64_t)(x)) * FX_SCALING_FACTOR / (y)))       
 
-#define FP_ADD(x,y)       ((x) + (y))                                 // charan comment: fp + fp
-#define FP_SUB(x,y)       ((x) - (y))                                 // charan comment: fp − fp
-#define FP_MUL(x,y)       ((fp)(((int64_t)(x)) * (y) / F))            // charan comment: fp × fp
-#define FP_DIV(x,y)       ((fp)(((int64_t)(x)) * F / (y)))            // charan comment: fp ÷ fp
-#define FP_ADD_INT(x,n)   ((x) + INT_TO_FP(n))                        // charan comment: fp + int
-#define FP_SUB_INT(x,n)   ((x) - INT_TO_FP(n))                        // charan comment: fp − int
-#define FP_MUL_INT(x,n)   ((x) * (n))                                 // charan comment: fp × int
-#define FP_DIV_INT(x,n)   ((x) / (n))                                 // charan comment: fp ÷ int
-/* ----------------------------------------------------------- */
+#define Fx_Pt_Adding_INT(x, n)        ((x) + int_to_fx_pt(n))                              
+#define Fx_Pt_Subtracting_INT(x, n)   ((x) - int_to_fx_pt(n))                               
+#define Fx_Pt_Multiplying_INT(x, n)   ((x) * (n))                                           
+#define Fx_Pt_Dividing_INT(x, n)      ((x) / (n))                                           
 
-// // charan comment : ended
-
+// // charan comment : end
 
 
 
@@ -106,9 +103,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 // // charan comment : start
 
 
-/* System load average, used by MLFQS. */                             // charan comment
-static fp load_avg;                                                   // charan comment
-
+static fx_pt load_avg;
 
 
 // // charan comment : ended
@@ -160,7 +155,7 @@ thread_init (void)
 
 
 
-  load_avg = INT_TO_FP(0);                                            // charan comment: start with 0 load average
+load_avg = int_to_fx_pt(0);  
 
 
 // // charan comment : end
@@ -356,66 +351,87 @@ void thread_recalculate_priority (struct thread *t)
 
 
 
-// // charan comment : start
+//// // charan comment : start
 
-/* ---------------- MLFQS helper functions ---------------- */        // charan comment
 
-/* Every tick: increment recent_cpu of running thread. */
-void mlfqs_increment(void) {                                   // charan comment
-  if (thread_current() == idle_thread) return;                        // charan comment: idle thread ignored
-  thread_current()->recent_cpu = FP_ADD_INT(thread_current()->recent_cpu, 1);
+void
+mlfqs_r_cpu_increment(void)
+{
+  struct thread *current_thread = thread_current();
+
+  if (current_thread == idle_thread)
+    return;
+
+  current_thread->recent_cpu = Fx_Pt_Adding_INT(current_thread->recent_cpu, 1);
 }
 
-/* Every second: update load_avg and each thread’s recent_cpu. */
-void mlfqs_update_load_avg_recent_cpu(void) {                  // charan comment
-  int ready_threads = list_size(&ready_list);                         // charan comment: ready threads count
-  if (thread_current() != idle_thread) ready_threads++;               // charan comment: include running thread
+void
+mlfqs_upt_loading_avg_r_cpu(void)
+{
+  int active_threads = list_size(&ready_list);
+  if (thread_current() != idle_thread)
+    active_threads++;
 
-  load_avg = FP_ADD(FP_MUL(FP_DIV_INT(INT_TO_FP(59),60),load_avg),
-                    FP_MUL_INT(FP_DIV_INT(INT_TO_FP(1),60),ready_threads));   // charan comment: BSD formula
+  fx_pt ratio_59 = Fx_Pt_Dividing_INT(int_to_fx_pt(59), 60);
+  fx_pt ratio_1  = Fx_Pt_Dividing_INT(int_to_fx_pt(1), 60);
+
+  load_avg = Fx_Pt_Adding(Fx_Pt_Multiplying(ratio_59, load_avg),
+                          Fx_Pt_Multiplying_INT(ratio_1, active_threads));
 
   struct list_elem *e;
-  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+  {
     struct thread *t = list_entry(e, struct thread, allelem);
-    if (t == idle_thread) continue;
-    fp coeff = FP_DIV(FP_MUL_INT(load_avg,2), FP_ADD_INT(FP_MUL_INT(load_avg,2),1));
-    t->recent_cpu = FP_ADD(FP_MUL(coeff,t->recent_cpu), INT_TO_FP(t->nice));
+    if (t == idle_thread)
+      continue;
+
+    fx_pt calc_coeff = Fx_Pt_Dividing(Fx_Pt_Multiplying_INT(load_avg, 2),
+                                      Fx_Pt_Adding_INT(Fx_Pt_Multiplying_INT(load_avg, 2), 1));
+
+    t->recent_cpu = Fx_Pt_Adding(Fx_Pt_Multiplying(calc_coeff, t->recent_cpu),
+                                 int_to_fx_pt(t->nice));
   }
 }
 
-/* Recalculate one thread’s priority using MLFQ formula. */
-void mlfqs_recalc_priority(struct thread *t) {                 // charan comment
-  if (t == idle_thread) { t->priority = PRI_MIN; return; }
+void
+mlfqs_recalc_priority(struct thread *t)
+{
+  if (t == idle_thread)
+  {
+    t->priority = PRI_MIN;
+    return;
+  }
 
+  fx_pt value_recent_cpu = Fx_Pt_Dividing_INT(t->recent_cpu, 4);
+  fx_pt value_nice_effect = int_to_fx_pt(t->nice * 2);
 
-  // charan comment: BSD formula — priority = PRI_MAX − (recent_cpu / 4) − (nice * 2)
-  fp term1 = FP_DIV_INT(t->recent_cpu, 4);                     // charan comment: fixed-point divide by 4
-  fp term2 = INT_TO_FP(t->nice * 2);                           // charan comment: convert nice adjustment to fixed-point
-  fp result = FP_SUB(FP_SUB(INT_TO_FP(PRI_MAX), term1), term2);
-  int new_priority = FP_TO_INT_NEAR(result);                   // charan comment: round to nearest integer
+  fx_pt computed_fx_priority =
+      Fx_Pt_Subtracting(Fx_Pt_Subtracting(int_to_fx_pt(PRI_MAX),
+                                          value_recent_cpu),
+                                          value_nice_effect);
 
+  int new_priority = fx_pt_TO_INT_NEAR(computed_fx_priority);
 
-  if (new_priority > PRI_MAX) new_priority = PRI_MAX;
-  if (new_priority < PRI_MIN) new_priority = PRI_MIN;
+  if (new_priority > PRI_MAX)
+    new_priority = PRI_MAX;
+  if (new_priority < PRI_MIN)
+    new_priority = PRI_MIN;
 
   t->priority = new_priority;
 }
 
-/* Recalculate priorities of all threads. */
-void mlfqs_recalc_all_priorities(void) {                       // charan comment
+void
+mlfqs_recalc_all_priorities(void)
+{
   struct list_elem *e;
-  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+  {
     struct thread *t = list_entry(e, struct thread, allelem);
     mlfqs_recalc_priority(t);
   }
 }
-/* ---------------------------------------------------------- */      // charan comment
-
-
-
 
 // // charan comment : end
-
 
 
 
@@ -527,7 +543,6 @@ thread_set_priority (int new_priority)
 
   // // charan comment : start
 
-  // charan comment: when using MLFQ scheduler, manual priority setting is disabled
   if (thread_mlfqs)   return;
 
   
@@ -565,36 +580,47 @@ thread_get_priority (void)
 // // charan comment : start
 
 // /* Sets the current thread's nice value to NICE. */
-// void
-// thread_set_nice (int nice UNUSED) 
-// {
-//   /* Not yet implemented. */
-// }
+void
+thread_set_nice(int new_nice)
+{
+  enum intr_level old_level = intr_disable();
+  struct thread *current = thread_current();
+
+  current->nice = new_nice;
+
+  /* Immediately recompute priority. */
+  mlfqs_recalc_priority(current);
+
+  intr_set_level(old_level);
+
+  /* Yield CPU if new priority is lower. */
+  thread_yield();
+}
+
 
 // /* Returns the current thread's nice value. */
-// int
-// thread_get_nice (void) 
-// {
-//   /* Not yet implemented. */
-//   return 0;
-// }
+int
+thread_get_nice(void)
+{
+  return thread_current()->nice;
+}
 
 // /* Returns 100 times the system load average. */
-// int
-// thread_get_load_avg (void) 
-// {
-//   /* Not yet implemented. */
-//   return 0;
-// }
+int
+thread_get_load_avg(void)
+{
+  fx_pt scaled_avg = Fx_Pt_Multiplying_INT(load_avg, 100);
+  return fx_pt_TO_INT_NEAR(scaled_avg);
+}
 
 // /* Returns 100 times the current thread's recent_cpu value. */
-// int
-// thread_get_recent_cpu (void) 
-// {
-//   /* Not yet implemented. */
-//   return 0;
-// }
-
+int
+thread_get_recent_cpu(void)
+{
+  struct thread *current = thread_current();
+  fx_pt scaled_cpu = Fx_Pt_Multiplying_INT(current->recent_cpu, 100);
+  return fx_pt_TO_INT_NEAR(scaled_cpu);
+}
 
 // // charan comment : end
 
@@ -695,7 +721,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
 
   t->nice = 0;                                                        // charan comment: default niceness = 0
-  t->recent_cpu = INT_TO_FP(0);                                       // charan comment: no CPU usage yet
+  t->recent_cpu = int_to_fx_pt(0);                                       // charan comment: no CPU usage yet
 
 
 // // charan comment : end
@@ -822,38 +848,3 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-
-
-
-// // charan comment : start
-
-
-
-/* Sets the current thread's nice value to NICE. */
-void thread_set_nice (int nice) {                                     // charan comment
-  enum intr_level old = intr_disable();
-  struct thread *t = thread_current();
-  t->nice = nice;
-  mlfqs_recalc_priority(t);                                           // charan comment: update priority immediately
-  intr_set_level(old);
-  thread_yield();                                                     // charan comment: yield if new priority lower
-}
-
-/* Returns the current thread's nice value. */
-int thread_get_nice (void) {                                          // charan comment
-  return thread_current()->nice;
-}
-
-/* Returns 100× system load_avg (rounded). */
-int thread_get_load_avg (void) {                                      // charan comment
-  return FP_TO_INT_NEAR(FP_MUL_INT(load_avg,100));
-}
-
-/* Returns 100× current thread’s recent_cpu (rounded). */
-int thread_get_recent_cpu (void) {                                    // charan comment
-  return FP_TO_INT_NEAR(FP_MUL_INT(thread_current()->recent_cpu,100));
-}
-
-
-
-// // charan comment : end

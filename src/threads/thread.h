@@ -103,10 +103,9 @@ struct thread
 
 
 
-    /* In struct thread, near other fields like priority or status */
 
-   int nice;                  /* Niceness value for MLFQS */            // charan comment: each thread's willingness to yield CPU (higher = less priority)
-   int32_t recent_cpu;        /* Recent CPU usage in fixed-point */     // charan comment: tracks how much CPU time the thread has recently consumed
+   int nice;                 
+   int32_t recent_cpu;       
 
    
    
@@ -189,11 +188,9 @@ int thread_get_load_avg (void);
 // // charan comment : start
 
 
-/* ----------------- MLFQS function declarations ----------------- */  // charan comment: added for timer.c linkage
-void mlfqs_increment (void);                                           // charan comment: increments recent_cpu each tick
-void mlfqs_update_load_avg_recent_cpu (void);                          // charan comment: updates load_avg and recent_cpu each second
-void mlfqs_recalc_all_priorities (void);                               // charan comment: recalculates priorities every 4 ticks
-/* ---------------------------------------------------------------- */  // charan comment: end of MLFQS extern declarations
+void mlfqs_r_cpu_increment (void);                             
+void mlfqs_upt_loading_avg_r_cpu (void);                         
+void mlfqs_recalc_all_priorities (void);                           
 
 
 // // charan comment : end

@@ -10,14 +10,12 @@
 
 // // charan comment : start
 
-
-/* --- MLFQS externs --- */                                           // charan comment
-extern void mlfqs_increment(void);
-extern void mlfqs_update_load_avg_recent_cpu(void);
-extern void mlfqs_recalc_all_priorities(void);
-
+extern void mlfqs_r_cpu_increment(void);          
+extern void mlfqs_upt_loading_avg_r_cpu(void);    
+extern void mlfqs_recalc_all_priorities(void);    
 
 // // charan comment : end
+
 
 
   
@@ -215,12 +213,12 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
 
 
-  if (thread_mlfqs) {                                                 // charan comment: run MLFQ updates
-    mlfqs_increment();                                                // charan comment: every tick
-    if (ticks % TIMER_FREQ == 0) mlfqs_update_load_avg_recent_cpu();  // charan comment: every second
-    if (ticks % 4 == 0) {                                             // charan comment: every 4 ticks
-      mlfqs_recalc_all_priorities();                                  // charan comment
-      intr_yield_on_return();                                         // charan comment: preempt if needed
+  if (thread_mlfqs) {                                                
+    mlfqs_r_cpu_increment();                                               
+    if (ticks % TIMER_FREQ == 0) mlfqs_upt_loading_avg_r_cpu();  
+    if (ticks % 4 == 0) {                                             
+      mlfqs_recalc_all_priorities();                                 
+      intr_yield_on_return();                                        
     }
   }
 

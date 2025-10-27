@@ -89,7 +89,14 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-    
+
+
+
+   int nice;                 
+   int32_t recent_cpu;       
+
+   
+   
     /* Tick value at or on which this thread must wake up (used by timer). */
     int64_t alarm_time;
 
@@ -100,14 +107,12 @@ struct thread
     struct list_elem elem;              /* List element. */
 
 
-      /* --- ADD/MODIFY THESE MEMBERS FOR PRIORITY SCHEDULING --- */
-      int base_priority;                  /* Original priority, without donations. */
-      struct list donations;              /* List of threads donating their priority to this one. */
-      struct list_elem donation_elem;     /* List element for the donations list. */
-      struct lock *wait_on_lock;          /* The lock this thread is currently waiting for. */
+      int base_priority;                 
+      struct list donations;             
+      struct list_elem donation_elem;     
+      struct lock *wait_on_lock;          
 
 
-   /* priority scheduling */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -155,5 +160,12 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+
+void r_cpu_increment (void);                             
+void upt_loading_avg_r_cpu (void);                         
+void upt_all_thread_priorities (void);                           
+
+
 
 #endif /* threads/thread.h */

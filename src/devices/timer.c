@@ -7,6 +7,16 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+
+
+extern void r_cpu_increment(void);          
+extern void upt_loading_avg_r_cpu(void);    
+extern void upt_all_thread_priorities(void);    
+
+
+
+
+
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -185,12 +195,34 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+
+static void
+tick_update(void)
+{
+  if (thread_mlfqs)
+  {
+    r_cpu_increment();
+
+    if (ticks % TIMER_FREQ == 0)
+      upt_loading_avg_r_cpu();
+
+    if (ticks % 4 == 0)
+    {
+      upt_all_thread_priorities();
+      intr_yield_on_return();
+    }
+  }
+}
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+
+  tick_update();
 
     /* Wake up threads whose alarm time has arrived. */
   while (!list_empty (&sleepers)) 

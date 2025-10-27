@@ -20,6 +20,42 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+
+
+
+typedef int32_t fx_pt;                    
+#define FX_SCALING_FACTOR (1 << 14)       
+
+#define int_to_fx_pt(n)        ((fx_pt)((n) * FX_SCALING_FACTOR))                          
+#define fx_pt_to_INT_ZERO(x)   ((x) / FX_SCALING_FACTOR)                                   
+#define fx_pt_TO_INT_NEAR(x)   ((x) >= 0 ? ((x) + FX_SCALING_FACTOR/2)/FX_SCALING_FACTOR : ((x) - FX_SCALING_FACTOR/2)/FX_SCALING_FACTOR)
+
+#define Fx_Pt_Adding(x, y)        ((x) + (y))                                               
+#define Fx_Pt_Subtracting(x, y)   ((x) - (y))                                               
+#define Fx_Pt_Multiplying(x, y)   ((fx_pt)(((int64_t)(x)) * (y) / FX_SCALING_FACTOR))       
+#define Fx_Pt_Dividing(x, y)      ((fx_pt)(((int64_t)(x)) * FX_SCALING_FACTOR / (y)))       
+
+#define Fx_Pt_Adding_INT(x, n)        ((x) + int_to_fx_pt(n))                              
+#define Fx_Pt_Subtracting_INT(x, n)   ((x) - int_to_fx_pt(n))                               
+#define Fx_Pt_Multiplying_INT(x, n)   ((x) * (n))                                           
+#define Fx_Pt_Dividing_INT(x, n)      ((x) / (n))                                           
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -53,6 +89,12 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+
+
+
+static fx_pt load_avg;
+
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -92,6 +134,15 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+
+
+
+load_avg = int_to_fx_pt(0);  
+
+
+
+
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -280,6 +331,122 @@ void thread_recalculate_priority (struct thread *t)
   t->priority = max_priority;
 }
 
+
+
+
+
+void
+r_cpu_increment(void)
+{
+  struct thread *current_thread = thread_current();
+
+  if (current_thread == idle_thread)
+    return;
+
+  current_thread->recent_cpu = Fx_Pt_Adding_INT(current_thread->recent_cpu, 1);
+}
+
+
+static void
+upt_each_thread_r_cpu(void)
+{
+  struct list_elem *ele;
+  for (ele = list_begin(&all_list); ele != list_end(&all_list); ele = list_next(ele))
+  {
+    struct thread *ct = list_entry(ele, struct thread, allelem);
+    if (ct == idle_thread)
+      continue;
+
+    fx_pt coefficient = Fx_Pt_Dividing(
+                           Fx_Pt_Multiplying_INT(load_avg, 2),
+                           Fx_Pt_Adding_INT(Fx_Pt_Multiplying_INT(load_avg, 2), 1));
+
+    ct->recent_cpu = Fx_Pt_Adding(
+                       Fx_Pt_Multiplying(coefficient, ct->recent_cpu),
+                       int_to_fx_pt(ct->nice));
+  }
+}
+
+void
+upt_loading_avg_r_cpu(void)
+{
+  int active_threads = list_size(&ready_list);
+  if (thread_current() != idle_thread)
+    active_threads++;
+
+  fx_pt ratio_59 = Fx_Pt_Dividing_INT(int_to_fx_pt(59), 60);
+  fx_pt ratio_1  = Fx_Pt_Dividing_INT(int_to_fx_pt(1), 60);
+
+  load_avg = Fx_Pt_Adding(Fx_Pt_Multiplying(ratio_59, load_avg),
+                          Fx_Pt_Multiplying_INT(ratio_1, active_threads));
+
+  upt_each_thread_r_cpu(); 
+}
+
+static bool
+handle_idle_thread_priority(struct thread *ct)
+{
+  if (ct == idle_thread)
+  {
+    ct->priority = PRI_MIN;
+    return true;    
+  }
+  return false;   
+}
+
+static int
+check_priority_value(int priority_value)
+{
+  if (priority_value > PRI_MAX)
+    return PRI_MAX;
+
+  if (priority_value < PRI_MIN)
+    return PRI_MIN;
+
+  return priority_value;
+}
+
+
+
+void
+upt_priority(struct thread *ct)
+{  if (handle_idle_thread_priority(ct))
+    return;
+
+  fx_pt value_recent_cpu = Fx_Pt_Dividing_INT(ct->recent_cpu, 4);
+  fx_pt value_nice_effect = int_to_fx_pt(ct->nice * 2);
+
+  fx_pt computed_fx_priority =
+      Fx_Pt_Subtracting(Fx_Pt_Subtracting(int_to_fx_pt(PRI_MAX),
+                                          value_recent_cpu),
+                                          value_nice_effect);
+
+  int new_priority = fx_pt_TO_INT_NEAR(computed_fx_priority);
+
+  new_priority = check_priority_value(new_priority);
+
+  ct->priority = new_priority;
+}
+
+
+
+void
+upt_all_thread_priorities(void)
+{
+  struct list_elem *ele;
+  for (ele = list_begin(&all_list); ele != list_end(&all_list); ele = list_next(ele))
+  {
+    struct thread *ct = list_entry(ele, struct thread, allelem);
+    upt_priority(ct);
+  }
+}
+
+
+
+
+
+
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) 
@@ -380,6 +547,10 @@ thread_set_priority (int new_priority)
 {
   struct thread *current = thread_current ();
   enum intr_level old_level;
+
+
+  if (thread_mlfqs)   return;
+
   
   old_level = intr_disable();
   
@@ -404,36 +575,54 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
-/* Sets the current thread's nice value to NICE. */
+
+
+
+
+
+// /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice(int new_nice)
 {
-  /* Not yet implemented. */
+  enum intr_level old_level = intr_disable();
+  struct thread *current = thread_current();
+
+  current->nice = new_nice;
+
+  upt_priority(current);
+
+  intr_set_level(old_level);
+
+  thread_yield();
 }
 
-/* Returns the current thread's nice value. */
+
+// /* Returns the current thread's nice value. */
 int
-thread_get_nice (void) 
+thread_get_nice(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
-/* Returns 100 times the system load average. */
+// /* Returns 100 times the system load average. */
 int
-thread_get_load_avg (void) 
+thread_get_load_avg(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  fx_pt scaled_avg = Fx_Pt_Multiplying_INT(load_avg, 100);
+  return fx_pt_TO_INT_NEAR(scaled_avg);
 }
 
-/* Returns 100 times the current thread's recent_cpu value. */
+// /* Returns 100 times the current thread's recent_cpu value. */
 int
-thread_get_recent_cpu (void) 
+thread_get_recent_cpu(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  struct thread *current = thread_current();
+  fx_pt scaled_cpu = Fx_Pt_Multiplying_INT(current->recent_cpu, 100);
+  return fx_pt_TO_INT_NEAR(scaled_cpu);
 }
+
+
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -525,6 +714,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->base_priority = priority;
   t->wait_on_lock = NULL;
   list_init (&t->donations);
+
+
+
+  t->nice = 0;                                                       
+  t->recent_cpu = int_to_fx_pt(0);                                   
+
+
+
 
   t->magic = THREAD_MAGIC;
 
@@ -646,3 +843,4 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+

@@ -92,33 +92,11 @@ struct thread
 
 
 
-
-
-
-
-
-// // charan comment : start
-
-
-
-
-
-
    int nice;                 
    int32_t recent_cpu;       
 
    
    
-
-
-
-
-
-
-
-// // charan comment : end
-
-
     /* Tick value at or on which this thread must wake up (used by timer). */
     int64_t alarm_time;
 
@@ -183,15 +161,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-// // charan comment : start
-
 
 void r_cpu_increment (void);                             
 void upt_loading_avg_r_cpu (void);                         
 void upt_all_thread_priorities (void);                           
 
-
-// // charan comment : end
 
 
 #endif /* threads/thread.h */

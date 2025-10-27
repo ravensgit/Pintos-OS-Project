@@ -23,11 +23,6 @@
 
 
 
-
-
-
-/// // charan comment : start
-
 typedef int32_t fx_pt;                    
 #define FX_SCALING_FACTOR (1 << 14)       
 
@@ -44,8 +39,6 @@ typedef int32_t fx_pt;
 #define Fx_Pt_Subtracting_INT(x, n)   ((x) - int_to_fx_pt(n))                               
 #define Fx_Pt_Multiplying_INT(x, n)   ((x) * (n))                                           
 #define Fx_Pt_Dividing_INT(x, n)      ((x) / (n))                                           
-
-// // charan comment : end
 
 
 
@@ -99,16 +92,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 
 
-
-// // charan comment : start
-
-
 static fx_pt load_avg;
-
-
-// // charan comment : ended
-
-
 
 
 
@@ -151,14 +135,12 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
-// // charan comment : start
 
 
 
 load_avg = int_to_fx_pt(0);  
 
 
-// // charan comment : end
 
 
 
@@ -351,7 +333,6 @@ void thread_recalculate_priority (struct thread *t)
 
 
 
-//// // charan comment : start
 
 
 void
@@ -459,8 +440,6 @@ upt_all_thread_priorities(void)
     upt_priority(ct);
   }
 }
-
-// // charan comment : end
 
 
 
@@ -570,15 +549,9 @@ thread_set_priority (int new_priority)
   enum intr_level old_level;
 
 
-  // // charan comment : start
-
   if (thread_mlfqs)   return;
 
   
-
-
-// // charan comment : end
-
   old_level = intr_disable();
   
   current->base_priority = new_priority;
@@ -606,7 +579,6 @@ thread_get_priority (void)
 
 
 
-// // charan comment : start
 
 // /* Sets the current thread's nice value to NICE. */
 void
@@ -649,7 +621,6 @@ thread_get_recent_cpu(void)
   return fx_pt_TO_INT_NEAR(scaled_cpu);
 }
 
-// // charan comment : end
 
 
 

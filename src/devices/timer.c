@@ -8,13 +8,12 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 
-// // charan comment : start
 
 extern void r_cpu_increment(void);          
 extern void upt_loading_avg_r_cpu(void);    
 extern void upt_all_thread_priorities(void);    
 
-// // charan comment : end
+
 
 
 
@@ -196,8 +195,6 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-// // charan comment : start
-
 
 static void
 tick_update(void)
@@ -217,12 +214,6 @@ tick_update(void)
   }
 }
 
-
-
-// // charan comment : end
-
-
-
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -231,22 +222,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
   thread_tick ();
 
 
-
-
-
-// // charan comment : start
-
-
-
-
-
-tick_update();
-
-
-
-
-// // charan comment : end
-
+  tick_update();
 
     /* Wake up threads whose alarm time has arrived. */
   while (!list_empty (&sleepers)) 

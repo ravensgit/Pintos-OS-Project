@@ -10,9 +10,9 @@
 
 // // charan comment : start
 
-extern void mlfqs_r_cpu_increment(void);          
-extern void mlfqs_upt_loading_avg_r_cpu(void);    
-extern void mlfqs_recalc_all_priorities(void);    
+extern void r_cpu_increment(void);          
+extern void upt_loading_avg_r_cpu(void);    
+extern void upt_all_thread_priorities(void);    
 
 // // charan comment : end
 
@@ -196,6 +196,33 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+// // charan comment : start
+
+
+static void
+tick_update(void)
+{
+  if (thread_mlfqs)
+  {
+    r_cpu_increment();
+
+    if (ticks % TIMER_FREQ == 0)
+      upt_loading_avg_r_cpu();
+
+    if (ticks % 4 == 0)
+    {
+      upt_all_thread_priorities();
+      intr_yield_on_return();
+    }
+  }
+}
+
+
+
+// // charan comment : end
+
+
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -213,15 +240,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
 
 
-  if (thread_mlfqs) {                                                
-    mlfqs_r_cpu_increment();                                               
-    if (ticks % TIMER_FREQ == 0) mlfqs_upt_loading_avg_r_cpu();  
-    if (ticks % 4 == 0) {                                             
-      mlfqs_recalc_all_priorities();                                 
-      intr_yield_on_return();                                        
-    }
-  }
-
+tick_update();
 
 
 

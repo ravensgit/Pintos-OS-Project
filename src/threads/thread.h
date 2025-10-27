@@ -188,9 +188,9 @@ int thread_get_load_avg (void);
 // // charan comment : start
 
 
-void mlfqs_r_cpu_increment (void);                             
-void mlfqs_upt_loading_avg_r_cpu (void);                         
-void mlfqs_recalc_all_priorities (void);                           
+void r_cpu_increment (void);                             
+void upt_loading_avg_r_cpu (void);                         
+void upt_all_thread_priorities (void);                           
 
 
 // // charan comment : end

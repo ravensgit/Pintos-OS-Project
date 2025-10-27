@@ -355,7 +355,7 @@ void thread_recalculate_priority (struct thread *t)
 
 
 void
-mlfqs_r_cpu_increment(void)
+r_cpu_increment(void)
 {
   struct thread *current_thread = thread_current();
 
@@ -365,8 +365,29 @@ mlfqs_r_cpu_increment(void)
   current_thread->recent_cpu = Fx_Pt_Adding_INT(current_thread->recent_cpu, 1);
 }
 
+
+static void
+upt_each_thread_r_cpu(void)
+{
+  struct list_elem *ele;
+  for (ele = list_begin(&all_list); ele != list_end(&all_list); ele = list_next(ele))
+  {
+    struct thread *ct = list_entry(ele, struct thread, allelem);
+    if (ct == idle_thread)
+      continue;
+
+    fx_pt coefficient = Fx_Pt_Dividing(
+                           Fx_Pt_Multiplying_INT(load_avg, 2),
+                           Fx_Pt_Adding_INT(Fx_Pt_Multiplying_INT(load_avg, 2), 1));
+
+    ct->recent_cpu = Fx_Pt_Adding(
+                       Fx_Pt_Multiplying(coefficient, ct->recent_cpu),
+                       int_to_fx_pt(ct->nice));
+  }
+}
+
 void
-mlfqs_upt_loading_avg_r_cpu(void)
+upt_loading_avg_r_cpu(void)
 {
   int active_threads = list_size(&ready_list);
   if (thread_current() != idle_thread)
@@ -378,32 +399,41 @@ mlfqs_upt_loading_avg_r_cpu(void)
   load_avg = Fx_Pt_Adding(Fx_Pt_Multiplying(ratio_59, load_avg),
                           Fx_Pt_Multiplying_INT(ratio_1, active_threads));
 
-  struct list_elem *e;
-  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
-  {
-    struct thread *t = list_entry(e, struct thread, allelem);
-    if (t == idle_thread)
-      continue;
-
-    fx_pt calc_coeff = Fx_Pt_Dividing(Fx_Pt_Multiplying_INT(load_avg, 2),
-                                      Fx_Pt_Adding_INT(Fx_Pt_Multiplying_INT(load_avg, 2), 1));
-
-    t->recent_cpu = Fx_Pt_Adding(Fx_Pt_Multiplying(calc_coeff, t->recent_cpu),
-                                 int_to_fx_pt(t->nice));
-  }
+  upt_each_thread_r_cpu(); 
 }
 
-void
-mlfqs_recalc_priority(struct thread *t)
+static bool
+handle_idle_thread_priority(struct thread *ct)
 {
-  if (t == idle_thread)
+  if (ct == idle_thread)
   {
-    t->priority = PRI_MIN;
-    return;
+    ct->priority = PRI_MIN;
+    return true;    
   }
+  return false;   
+}
 
-  fx_pt value_recent_cpu = Fx_Pt_Dividing_INT(t->recent_cpu, 4);
-  fx_pt value_nice_effect = int_to_fx_pt(t->nice * 2);
+static int
+check_priority_value(int priority_value)
+{
+  if (priority_value > PRI_MAX)
+    return PRI_MAX;
+
+  if (priority_value < PRI_MIN)
+    return PRI_MIN;
+
+  return priority_value;
+}
+
+
+
+void
+upt_priority(struct thread *ct)
+{  if (handle_idle_thread_priority(ct))
+    return;
+
+  fx_pt value_recent_cpu = Fx_Pt_Dividing_INT(ct->recent_cpu, 4);
+  fx_pt value_nice_effect = int_to_fx_pt(ct->nice * 2);
 
   fx_pt computed_fx_priority =
       Fx_Pt_Subtracting(Fx_Pt_Subtracting(int_to_fx_pt(PRI_MAX),
@@ -412,22 +442,21 @@ mlfqs_recalc_priority(struct thread *t)
 
   int new_priority = fx_pt_TO_INT_NEAR(computed_fx_priority);
 
-  if (new_priority > PRI_MAX)
-    new_priority = PRI_MAX;
-  if (new_priority < PRI_MIN)
-    new_priority = PRI_MIN;
+  new_priority = check_priority_value(new_priority);
 
-  t->priority = new_priority;
+  ct->priority = new_priority;
 }
 
+
+
 void
-mlfqs_recalc_all_priorities(void)
+upt_all_thread_priorities(void)
 {
-  struct list_elem *e;
-  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+  struct list_elem *ele;
+  for (ele = list_begin(&all_list); ele != list_end(&all_list); ele = list_next(ele))
   {
-    struct thread *t = list_entry(e, struct thread, allelem);
-    mlfqs_recalc_priority(t);
+    struct thread *ct = list_entry(ele, struct thread, allelem);
+    upt_priority(ct);
   }
 }
 
@@ -588,12 +617,10 @@ thread_set_nice(int new_nice)
 
   current->nice = new_nice;
 
-  /* Immediately recompute priority. */
-  mlfqs_recalc_priority(current);
+  upt_priority(current);
 
   intr_set_level(old_level);
 
-  /* Yield CPU if new priority is lower. */
   thread_yield();
 }
 
@@ -717,14 +744,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->wait_on_lock = NULL;
   list_init (&t->donations);
 
-// // charan comment : start
 
 
-  t->nice = 0;                                                        // charan comment: default niceness = 0
-  t->recent_cpu = int_to_fx_pt(0);                                       // charan comment: no CPU usage yet
+  t->nice = 0;                                                       
+  t->recent_cpu = int_to_fx_pt(0);                                   
 
 
-// // charan comment : end
 
 
   t->magic = THREAD_MAGIC;
